@@ -28,10 +28,11 @@ WORKDIR /app
 # Copy all files
 COPY . .
 
-# Install PHP deps
-# --no-scripts: skip Laravel post-install scripts (they need APP_KEY which is only at runtime)
-# --ignore-platform-reqs: bypass Windows vs Linux composer.lock mismatch
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts --ignore-platform-reqs
+# Delete Windows-generated lock file so Composer resolves fresh on Linux
+RUN rm -f composer.lock
+
+# Install PHP deps cleanly for Linux environment
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
 # Install Node deps and build frontend
 RUN npm install
@@ -42,8 +43,7 @@ RUN chmod -R 775 storage bootstrap/cache
 
 EXPOSE 8000
 
-# At runtime: APP_KEY is available, so we can run artisan commands safely
+# Run artisan commands at startup (APP_KEY is available here as env var)
 CMD php artisan config:clear && \
-    php artisan storage:link --force && \
     php artisan migrate --force && \
     php artisan serve --host=0.0.0.0 --port=${PORT:-8000}
