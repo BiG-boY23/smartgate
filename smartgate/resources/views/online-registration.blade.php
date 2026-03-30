@@ -329,6 +329,24 @@
         .summary-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 800; }
         .summary-value { font-size: 1.1rem; font-weight: 700; color: var(--primary-dark); }
 
+        /* Chained dropdown helpers */
+        select:disabled { background: #f8fafc; color: #94a3b8; cursor: not-allowed; }
+        .chain-hint { font-size: 0.75rem; color: #94a3b8; font-weight: 600; margin-top: 5px; display: flex; align-items: center; gap: 4px; }
+        .step-tag {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 20px; height: 20px; background: #741b1b; color: white;
+            border-radius: 50%; font-size: 0.7rem; font-weight: 800; margin-right: 4px;
+        }
+        .dd-loader {
+            position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+        }
+        .dd-spinner {
+            width: 16px; height: 16px; border: 2px solid #741b1b;
+            border-top-color: transparent; border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
         /* Privacy */
         .privacy-box {
             margin-top: 2rem;
@@ -445,24 +463,53 @@
                         </div>
                     </div>
 
-                    <!-- Slide 2: Vehicle Identity -->
+                    <!-- Slide 2: Vehicle Identity (Chained Dropdowns) -->
                     <div class="form-slide" id="slide-2-content">
+
+                        <!-- Step 1: Category -->
                         <div class="form-group">
-                            <label>Vehicle Category</label>
-                            <select name="vehicle_type" required data-summary="Vehicle Type">
-                                <option value="car">Car / Sedan</option>
-                                <option value="suv">SUV / Pick-up</option>
-                                <option value="van">Van / MPV</option>
-                                <option value="motorcycle">Motorcycle</option>
+                            <label for="vehicle-category-selector">
+                                <span class="step-tag">1</span> Vehicle Category <span style="color:red">*</span>
+                            </label>
+                            <select name="vehicle_type" id="vehicle-category-selector" required data-summary="Vehicle Type">
+                                <option value="" disabled selected>Select Category…</option>
+                                @foreach($categories as $cat)
+                                    <option value="{{ $cat->name }}" data-id="{{ $cat->id }}">{{ $cat->name }}</option>
+                                @endforeach
                             </select>
+                            <div class="chain-hint"><i class="ph ph-arrow-down"></i> Brand list updates automatically</div>
                         </div>
+
+                        <!-- Step 2: Brand (disabled until category chosen) -->
                         <div class="form-group">
-                            <label>License Plate Number</label>
+                            <label for="brand-selector">
+                                <span class="step-tag">2</span> Manufacturer / Brand <span style="color:red">*</span>
+                            </label>
+                            <div style="position:relative">
+                                <select name="make_brand" id="brand-selector" required data-summary="Brand" disabled>
+                                    <option value="" disabled selected>Select Category First…</option>
+                                </select>
+                                <div id="brand-loader" class="dd-loader" style="display:none"><div class="dd-spinner"></div></div>
+                            </div>
+                            <div class="chain-hint"><i class="ph ph-arrow-down"></i> Model list updates automatically</div>
+                        </div>
+
+                        <!-- Step 3: Model (disabled until brand chosen) -->
+                        <div class="form-group">
+                            <label for="model-selector">
+                                <span class="step-tag">3</span> Specific Model <span style="color:red">*</span>
+                            </label>
+                            <div style="position:relative">
+                                <select name="model_name" id="model-selector" required data-summary="Model" disabled>
+                                    <option value="" disabled selected>Select Brand First…</option>
+                                </select>
+                                <div id="model-loader" class="dd-loader" style="display:none"><div class="dd-spinner"></div></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>License Plate Number <span style="color:red">*</span></label>
                             <input type="text" name="plate_number" placeholder="ABC 1234" required style="text-transform:uppercase" data-summary="Plate No.">
-                        </div>
-                        <div class="form-group">
-                            <label>Manufacturer & Model Brand</label>
-                            <input type="text" name="make_brand" placeholder="e.g. Toyota Vios" required data-summary="Make/Model">
                         </div>
                     </div>
 
@@ -640,17 +687,23 @@
             function populateSummary() {
                 const fName = document.getElementsByName('first_name')[0].value;
                 const lName = document.getElementsByName('last_name')[0].value;
-                const role = document.getElementById('role-selector').selectedOptions[0].text;
+                const role  = document.getElementById('role-selector').selectedOptions[0].text;
                 const phone = document.getElementsByName('contact_number')[0].value;
                 const email = document.getElementsByName('email_address')[0].value;
-                const vType = document.getElementsByName('vehicle_type')[0].selectedOptions[0].text;
                 const plate = document.getElementsByName('plate_number')[0].value;
-                const make = document.getElementsByName('make_brand')[0].value;
 
-                document.getElementById('sum-name').innerText = `${fName} ${lName}`;
-                document.getElementById('sum-role').innerText = role;
+                const catSel   = document.getElementById('vehicle-category-selector');
+                const brandSel = document.getElementById('brand-selector');
+                const modelSel = document.getElementById('model-selector');
+
+                const catName   = catSel   && catSel.value   ? catSel.selectedOptions[0].text   : '—';
+                const brandName = brandSel && brandSel.value ? brandSel.selectedOptions[0].text : '—';
+                const modelName = modelSel && modelSel.value ? modelSel.selectedOptions[0].text : '—';
+
+                document.getElementById('sum-name').innerText    = `${fName} ${lName}`;
+                document.getElementById('sum-role').innerText    = role;
                 document.getElementById('sum-contact').innerText = `${phone} | ${email || 'No email'}`;
-                document.getElementById('sum-vehicle').innerText = `${vType}: ${make} (${plate.toUpperCase()})`;
+                document.getElementById('sum-vehicle').innerText = `${catName} › ${brandName} ${modelName} (${plate.toUpperCase()})`;
 
                 // Files
                 const fileContainer = document.getElementById('sum-files');
@@ -664,6 +717,84 @@
                     }
                 });
             }
+
+
+            // ─── AJAX Chained Dropdowns: Category → Brand → Model ─────────────────
+            const catSel   = document.getElementById('vehicle-category-selector');
+            const brandSel = document.getElementById('brand-selector');
+            const modelSel = document.getElementById('model-selector');
+            const brandSpinner = document.getElementById('brand-loader');
+            const modelSpinner = document.getElementById('model-loader');
+
+            function resetSelect(sel, placeholder) {
+                sel.innerHTML = `<option value="" disabled selected>${placeholder}</option>`;
+                sel.disabled = true;
+            }
+
+            catSel.addEventListener('change', async function () {
+                const categoryId = this.selectedOptions[0].dataset.id;
+                if (!categoryId) return;
+                
+                resetSelect(brandSel, 'Loading brands…');
+                resetSelect(modelSel, 'Select Brand First…');
+                brandSpinner.style.display = 'block';
+
+                try {
+                    const res    = await fetch(`/api/brands/${categoryId}`);
+                    const brands = await res.json();
+
+                    resetSelect(brandSel, brands.length ? 'Select Brand…' : 'Select Brand (Generic/Others Available)');
+                    
+                    brands.forEach(b => {
+                        brandSel.innerHTML += `<option value="${b.name}" data-id="${b.id}">${b.name}</option>`;
+                    });
+                    
+                    // Always ensure a fallback option is available
+                    brandSel.innerHTML += `<option value="Other" data-id="">Other / Brand Not Listed</option>`;
+                    brandSel.disabled = false;
+                } catch(e) {
+                    resetSelect(brandSel, 'Selection Error');
+                    brandSel.innerHTML += `<option value="Other" data-id="">Other / Manual Entry</option>`;
+                    brandSel.disabled = false;
+                    console.error(e);
+                } finally {
+                    brandSpinner.style.display = 'none';
+                }
+            });
+
+            brandSel.addEventListener('change', async function () {
+                const brandId = this.selectedOptions[0].dataset.id;
+                resetSelect(modelSel, 'Loading models…');
+                modelSpinner.style.display = 'block';
+
+                if (!brandId) {
+                    modelSel.innerHTML = `<option value="Other (Not Listed)" selected>Other / Not Listed</option>`;
+                    modelSel.disabled = false;
+                    modelSpinner.style.display = 'none';
+                    return;
+                }
+
+                try {
+                    const res    = await fetch(`/api/models/${brandId}`);
+                    const models = await res.json();
+
+                    resetSelect(modelSel, models.length ? 'Select Model…' : 'Select Model (Generic/Others Available)');
+                    models.forEach(m => {
+                        modelSel.innerHTML += `<option value="${m.name}">${m.name}</option>`;
+                    });
+                    modelSel.innerHTML += `<option value="Other (Not Listed)">Other / Brand Not Listed</option>`;
+                    modelSel.disabled = false;
+                } catch(e) {
+                    resetSelect(modelSel, 'Selection Error');
+                    modelSel.innerHTML += `<option value="Other (Not Listed)">Other / Manual Entry</option>`;
+                    modelSel.disabled = false;
+                    console.error(e);
+                } finally {
+                    modelSpinner.style.display = 'none';
+                }
+            });
+
+
 
             // Role Dynamic Logic
             const roleSelector = document.getElementById('role-selector');
@@ -687,8 +818,21 @@
                     html = `
                         <div class="input-grid">
                             <div class="form-group"><label>Student ID Number</label><input type="text" name="student_id" placeholder="e.g. 2024-10234" required></div>
-                            <div class="form-group"><label>Course / Program</label><input type="text" name="course" placeholder="e.g. BS in Information Technology" required></div>
-                            <div class="form-group"><label>College / Department</label><input type="text" name="college_dept" placeholder="e.g. COICT" required></div>
+                            <div class="form-group">
+                                <label>College / Department</label>
+                                <select name="college_dept" id="college-selector" required>
+                                    <option value="" disabled selected>Select College...</option>
+                                    @foreach($colleges as $c)
+                                        <option value="{{ $c->name }}" data-courses="{{ json_encode($c->courses->pluck('name')) }}">{{ $c->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Course / Program</label>
+                                <select name="course" id="course-selector" required>
+                                    <option value="" disabled selected>Select College First...</option>
+                                </select>
+                            </div>
                             <div class="form-group">
                                 <label>Year Level</label>
                                 <select name="year_level" required>
@@ -718,7 +862,15 @@
                    html = `
                         <div class="input-grid">
                              <div class="form-group"><label>Faculty ID Number</label><input type="text" name="faculty_id" placeholder="F-XXXXX" required></div>
-                             <div class="form-group"><label>Academic Department</label><input type="text" name="college_dept_faculty" placeholder="e.g. College of Engineering" required></div>
+                             <div class="form-group">
+                                <label>Academic Department</label>
+                                <select name="college_dept_faculty" required>
+                                    <option value="" disabled selected>Select Department...</option>
+                                    @foreach($colleges as $c)
+                                        <option value="{{ $c->name }}">{{ $c->name }}</option>
+                                    @endforeach
+                                </select>
+                             </div>
                         </div>
                         <div class="form-group"><label>Home/Local Address</label><input type="text" name="address" placeholder="Complete address for records" required></div>
                         <input type="hidden" name="access_classification_faculty" value="faculty">`;
@@ -792,6 +944,23 @@
             }
 
             attachDocListeners();
+
+            // College → Course chained dropdown (inline data-courses attribute)
+            document.body.addEventListener('change', (e) => {
+                if(e.target.id === 'college-selector') {
+                    const selector = e.target;
+                    const courseSelector = document.getElementById('course-selector');
+                    const courses = JSON.parse(selector.selectedOptions[0].dataset.courses || '[]');
+                    
+                    courseSelector.innerHTML = '<option value="" disabled selected>Select Course...</option>';
+                    courses.forEach(c => {
+                        const opt = document.createElement('option');
+                        opt.value = c; opt.innerText = c;
+                        courseSelector.appendChild(opt);
+                    });
+                }
+            });
+
 
             document.getElementById('main-form').onsubmit = () => {
                 Swal.fire({ title:'SECURE SUBMISSION...', text:'Please wait while we encrypt and primary-save your registration.', allowOutsideClick:false, didOpen:()=>Swal.showLoading() });

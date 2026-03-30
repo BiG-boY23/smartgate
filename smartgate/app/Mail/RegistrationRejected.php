@@ -29,7 +29,7 @@ class RegistrationRejected extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Vehicle Registration Rejected - SmartGate',
+            subject: 'Action Required: Vehicle Registration Rejected',
         );
     }
 
@@ -39,7 +39,7 @@ class RegistrationRejected extends Mailable
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.registration_rejected',
+            view: 'emails.registration_rejected',
         );
     }
 

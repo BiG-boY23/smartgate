@@ -14,15 +14,16 @@ class CheckRole
      *
      * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
      */
-    public function handle(Request $request, Closure $next, string $role): Response
+    public function handle(Request $request, Closure $next, string $roles): Response
     {
         if (!Session::has('user')) {
             return redirect()->route('login');
         }
 
         $userRole = Session::get('role');
+        $allowedRoles = explode(',', $roles);
 
-        if ($userRole !== $role) {
+        if (!in_array($userRole, $allowedRoles)) {
             // unauthorized, redirect to their own dashboard
              if ($userRole === 'admin') return redirect()->route('admin.dashboard');
              if ($userRole === 'office') return redirect()->route('office.dashboard');

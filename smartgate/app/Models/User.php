@@ -25,7 +25,20 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'profile_picture',
+        'dark_mode',
+        'two_factor_enabled',
+        'language',
     ];
+
+    /**
+     * Get login history
+     */
+    public function loginLogs()
+    {
+        return $this->hasMany(\App\Models\LoginLog::class);
+    }
+
 
     /**
      * The attributes that should be hidden for serialization.

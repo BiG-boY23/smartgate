@@ -70,12 +70,13 @@
                             <i class="ph ph-pencil-simple"></i> Edit
                         </button>
                         @if($user->id !== Auth::id())
-                        <form action="{{ route('admin.users.delete', $user->id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this user?')">
+                        <button type="button" class="btn btn-outline" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; color: #dc2626; border-color: #fee2e2;"
+                                onclick="confirmDeleteUser({{ $user->id }}, '{{ $user->first_name }} {{ $user->last_name }}')">
+                            <i class="ph ph-trash"></i> Delete
+                        </button>
+                        <form id="delete-user-{{ $user->id }}" action="{{ route('admin.users.delete', $user->id) }}" method="POST" style="display: none;">
                             @csrf
                             @method('DELETE')
-                            <button type="submit" class="btn btn-outline" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; color: #dc2626; border-color: #fee2e2;">
-                                <i class="ph ph-trash"></i> Delete
-                            </button>
                         </form>
                         @endif
                     </td>
@@ -253,6 +254,22 @@
                     return false;
                 }
                 form.submit();
+            }
+        });
+    }
+
+    function confirmDeleteUser(id, name) {
+        Swal.fire({
+            title: 'Delete User Account?',
+            text: `Are you sure you want to remove ${name} from the system? This user will lose all access immediately.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#741b1b',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Yes, delete account'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.getElementById('delete-user-' + id).submit();
             }
         });
     }

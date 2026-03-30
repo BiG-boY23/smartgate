@@ -4,14 +4,21 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\VehicleRegistration;
+use App\Models\Vehicle;
 use App\Models\RegistrationReview;
 use App\Models\User;
 use App\Models\AuditLog;
 use App\Models\VehicleLog;
 use App\Models\Visitor;
+use App\Models\SystemLog;
+use App\Models\LockdownRecord;
+use App\Models\SystemSetting;
+use App\Exports\TrafficLogExport;
+use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
@@ -21,13 +28,13 @@ class DashboardController extends Controller
         // Get real statistics from database
         $stats = [
             'total_rfid' => VehicleRegistration::count(),
-            'active_rfid' => VehicleRegistration::where('status', 'approved')->count(),
+            'active_rfid' => Vehicle::count(),
             'blacklisted_rfid' => VehicleRegistration::where('status', 'rejected')->count(),
             'pending_registrations' => VehicleRegistration::where('status', 'pending')->count(),
-            // Placeholder: use total approved registrations as total entries until a gate log table exists
-            'total_entries' => VehicleRegistration::where('status', 'approved')->count(),
-            // Entries created (registrations) today
-            'entries_today' => VehicleRegistration::whereDate('created_at', Carbon::today())->count(),
+            'entries_today' => VehicleLog::where('type', 'entry')->whereDate('timestamp', Carbon::today())->count(),
+            'exits_today' => VehicleLog::where('type', 'exit')->whereDate('timestamp', Carbon::today())->count(),
+            'current_occupancy' => VehicleLog::dailyOccupancy(),
+            'total_capacity' => (int)SystemSetting::get('total_parking_slots', 200),
         ];
 
         // Get recent registrations for activity logs (load latest review + admin)
@@ -35,6 +42,8 @@ class DashboardController extends Controller
             ->orderBy('created_at', 'desc')
             ->limit(5)
             ->get();
+
+        $lockdownHistory = LockdownRecord::with('admin')->orderBy('started_at', 'desc')->limit(10)->get();
 
         $logs = $recentRegistrations->map(function ($registration) {
             return [
@@ -45,7 +54,7 @@ class DashboardController extends Controller
             ];
         })->toArray();
 
-        return view('admin.dashboard', compact('stats', 'logs'));
+        return view('admin.dashboard', compact('stats', 'logs', 'lockdownHistory'));
     }
 
     public function users()
@@ -168,11 +177,13 @@ class DashboardController extends Controller
         
         $stats = [
             'total' => VehicleRegistration::count(),
-            'active' => VehicleRegistration::where('status', 'approved')->count(),
+            'active' => Vehicle::count(),
             'blacklisted' => VehicleRegistration::where('status', 'rejected')->count(),
         ];
 
-        return view('admin.rfid', compact('registrations', 'stats'));
+        $categories = \App\Models\VehicleCategory::where('is_active', true)->orderBy('name')->get();
+
+        return view('admin.rfid', compact('registrations', 'stats', 'categories'));
     }
 
     public function storeRegistration(Request $request)
@@ -182,8 +193,9 @@ class DashboardController extends Controller
             'fullName' => 'required|string|max:255',
             'contactNumber' => 'required|string|max:20',
             'emailAddress' => 'nullable|email|max:255',
-            'vehicleType' => 'required|in:car,suv,van,motorcycle',
+            'vehicleType' => 'required|string|max:100',
             'makeBrand' => 'required|string|max:255',
+            'modelName' => 'nullable|string|max:255',
             'plateNumber' => 'required|string|max:20',
             'rfidTagId' => 'required|string|unique:vehicle_registrations,rfid_tag_id',
         ]);
@@ -204,6 +216,7 @@ class DashboardController extends Controller
             'email_address' => $request->emailAddress ?? 'N/A',
             'vehicle_type' => $request->vehicleType,
             'make_brand' => $request->makeBrand,
+            'model_name' => $request->modelName,
             'plate_number' => $request->plateNumber,
             'rfid_tag_id' => $request->rfidTagId,
             'status' => 'approved',
@@ -244,46 +257,84 @@ class DashboardController extends Controller
         return response()->json($registration);
     }
 
-    public function reports()
+    public function reports(Request $request)
     {
-        // Fetch Audit Logs
+        // 1. Audit Logs (Historical)
         $auditLogs = AuditLog::with('user')->orderByDesc('created_at')->paginate(20, ['*'], 'audit_page');
 
-        // Fetch Gate Traffic (Manual + RFID)
-        $rfidLogs = VehicleLog::with('vehicleRegistration')->orderByDesc('timestamp')->limit(100)->get()->map(function($log) {
-            return [
-                'time' => $log->timestamp,
-                'category' => 'RFID',
-                'type' => $log->type,
-                'detail' => $log->vehicleRegistration->full_name . " (" . $log->vehicleRegistration->plate_number . ")",
-                'plate' => $log->vehicleRegistration->plate_number
-            ];
-        });
+        // 2. Gate Traffic (Filtered)
+        $query = VehicleLog::with(['vehicleRegistration', 'vehicle']);
 
-        $vLogs = Visitor::orderByDesc('time_in')->limit(100)->get()->flatMap(function($v) {
-            $logs = [];
-            $logs[] = [
-                'time' => $v->time_in,
-                'category' => 'Visitor',
-                'type' => 'entry',
-                'detail' => $v->name . " (Visitor)",
-                'plate' => $v->plate ?? 'N/A'
-            ];
-            if ($v->time_out) {
-                $logs[] = [
-                    'time' => $v->time_out,
-                    'category' => 'Visitor',
-                    'type' => 'exit',
-                    'detail' => $v->name . " (Visitor)",
-                    'plate' => $v->plate ?? 'N/A'
-                ];
+        // Apply Search
+        if ($request->filled('search')) {
+            $search = $request->get('search');
+            $query->where(function($q) use ($search) {
+                $q->whereHas('vehicleRegistration', function($qr) use ($search) {
+                    $qr->where('full_name', 'like', "%$search%");
+                })->orWhereHas('vehicle', function($qv) use ($search) {
+                    $qv->where('plate_number', 'like', "%$search%");
+                });
+            });
+        }
+
+        // Apply Status
+        if ($request->filled('status') && $request->get('status') !== 'all') {
+            $query->where('type', $request->get('status'));
+        }
+
+        // Apply Date Range
+        $from = $request->filled('from') ? Carbon::parse($request->get('from'))->startOfDay() : Carbon::today()->startOfDay();
+        $to = $request->filled('to') ? Carbon::parse($request->get('to'))->endOfDay() : Carbon::today()->endOfDay();
+        $query->whereBetween('timestamp', [$from, $to]);
+
+        $logs = $query->orderByDesc('timestamp')->get();
+
+        // 3. Trend Analytics (Daily Entries vs Exits)
+        $trendData = ['entry' => [], 'exit' => []];
+        $days = [];
+        $tempFrom = clone $from;
+        
+        // Ensure we have at least 7 days for a good trend if range is small
+        $diff = $from->diffInDays($to);
+        if($diff < 7 && !request()->filled('from')) {
+            $tempFrom = clone $to;
+            $tempFrom->subDays(7);
+        }
+
+        for ($d = clone $tempFrom; $d <= $to; $d->addDay()) {
+            $dateStr = $d->format('Y-m-d');
+            $days[] = $d->format('M d');
+            $trendData['entry'][$dateStr] = 0;
+            $trendData['exit'][$dateStr] = 0;
+        }
+
+        // We need a separate query for accurate trends that isn't affected by Search/Status filters 
+        // unless the user implicitly wants to trend their search (complex).
+        // Let's trend ALL movement for the selected period.
+        $trendLogs = VehicleLog::whereBetween('timestamp', [$tempFrom, $to])->get();
+        foreach ($trendLogs as $tlog) {
+            $dateStr = $tlog->timestamp->format('Y-m-d');
+            if (isset($trendData[$tlog->type][$dateStr])) {
+                $trendData[$tlog->type][$dateStr]++;
             }
-            return $logs;
-        });
+        }
 
-        $trafficLogs = $rfidLogs->concat($vLogs)->sortByDesc('time')->values();
+        $chartData = [
+            'labels' => $days,
+            'entries' => array_values($trendData['entry']),
+            'exits' => array_values($trendData['exit']),
+        ];
 
-        return view('admin.reports', compact('auditLogs', 'trafficLogs'));
+        return view('admin.reports', compact('auditLogs', 'logs', 'chartData'));
+    }
+
+    /**
+     * Export Traffic Logs to Excel (.xlsx)
+     */
+    public function exportExcel(Request $request)
+    {
+        $filters = $request->only(['from', 'to', 'search', 'status']);
+        return Excel::download(new TrafficLogExport($filters), 'EVSU_SmartGate_Report_' . date('Y-m-d') . '.xlsx');
     }
 
     private function recordActivity($action, $details)
@@ -298,6 +349,169 @@ class DashboardController extends Controller
 
     public function settings()
     {
-        return view('admin.settings');
+        $settings = [
+            'cooldown_interval' => SystemSetting::get('cooldown_interval', 3),
+            'tag_logic' => SystemSetting::get('tag_logic', 'flexible'),
+            'total_parking_slots' => SystemSetting::get('total_parking_slots', 200),
+            'occupancy_warning_threshold' => SystemSetting::get('occupancy_warning_threshold', 90),
+            'blacklist_alarm' => SystemSetting::get('blacklist_alarm', 'on'),
+            'expiry_alert_lead_time' => SystemSetting::get('expiry_alert_lead_time', 30),
+            'guard_ticker' => SystemSetting::get('guard_ticker', 'Welcome to EVSU. Please check your RFID tags before entry.'),
+            'bridge_heartbeat_freq' => SystemSetting::get('bridge_heartbeat_freq', 30),
+            'validity_period' => SystemSetting::get('validity_period', 1),
+            'evsu_logo' => SystemSetting::get('evsu_logo'),
+            'chocobol_logo' => SystemSetting::get('chocobol_logo'),
+            'rfid_fee' => SystemSetting::get('rfid_fee', 100),
+        ];
+
+        return view('admin.settings', compact('settings'));
+    }
+
+    public function updateSettings(Request $request)
+    {
+        // Define list of possible settings to process
+        $settingKeys = [
+            'cooldown_interval', 'tag_logic', 'total_parking_slots', 
+            'occupancy_warning_threshold', 'blacklist_alarm', 
+            'expiry_alert_lead_time', 'guard_ticker', 
+            'bridge_heartbeat_freq', 'validity_period', 'rfid_fee'
+        ];
+
+        foreach ($settingKeys as $key) {
+            if ($request->has($key)) {
+                SystemSetting::set($key, $request->input($key));
+            }
+        }
+
+        // Handle File Uploads (Only update if a new file is provided)
+        $fileSettings = ['evsu_logo', 'chocobol_logo'];
+        foreach ($fileSettings as $key) {
+            if ($request->hasFile($key)) {
+                $file = $request->file($key);
+                $filename = $key . '_' . time() . '.' . $file->getClientOriginalExtension();
+                $path = $file->storeAs('settings', $filename, 'public');
+                SystemSetting::set($key, $path);
+            }
+        }
+
+        // Add to audit log
+        $this->recordActivity('SETTINGS_UPDATED', "Administrator updated global system settings.");
+
+        return redirect()->back()->with('success', 'System Command Center settings updated successfully.');
+    }
+
+    /**
+     * Heartbeat from bridge_service.py
+     */
+    public function bridgeHeartbeat(Request $request)
+    {
+        $port = $request->input('port', 'Unknown');
+        
+        Cache::put('bridge_last_heartbeat', now(), 120); // 2 min expiry
+        Cache::put('bridge_com_port', $port, 120);
+
+        return response()->json(['status' => 'success']);
+    }
+
+    /**
+     * Sync buffered scans from bridge_service.py
+     */
+    public function bridgeSync(Request $request)
+    {
+        $scans = $request->input('scans', []);
+        $count = 0;
+
+        foreach ($scans as $scan) {
+            $tagId = $scan['tagId'];
+            $timestamp = Carbon::parse($scan['timestamp']);
+
+            $vehicle = Vehicle::where('rfid_tag', $tagId)->first();
+            $registration = $vehicle ? $vehicle->owner : null;
+
+            VehicleLog::create([
+                'vehicle_registration_id' => $registration ? $registration->id : null,
+                'vehicle_id' => $vehicle ? $vehicle->id : null,
+                'rfid_tag_id' => $tagId,
+                'type' => 'entry', 
+                'timestamp' => $timestamp
+            ]);
+
+            $count++;
+        }
+
+        if ($count > 0) {
+            SystemLog::create([
+                'type' => 'sync',
+                'source' => 'bridge',
+                'message' => "Successfully synced {$count} offline scans.",
+                'details' => ['scans' => $count]
+            ]);
+        }
+
+        return response()->json(['success' => true, 'synced' => $count]);
+    }
+
+    /**
+     * System Logs View
+     */
+    public function systemLogs()
+    {
+        $logs = SystemLog::orderByDesc('created_at')->limit(100)->get();
+        return view('admin.system-logs', compact('logs'));
+    }
+
+    public function bridgeStatus()
+    {
+        $connection = @fsockopen('127.0.0.1', 8080, $errno, $errstr, 1);
+        if ($connection) {
+            fclose($connection);
+            return response()->json(['online' => true]);
+        }
+        return response()->json(['online' => false]);
+    }
+
+    /**
+     * Toggles global system lockdown.
+     */
+    public function toggleLockdown(Request $request)
+    {
+        $current = Cache::get('system_lockdown', ['active' => false, 'reason' => '']);
+        $newActive = !$current['active'];
+        $reason = $request->input('reason', 'N/A');
+
+        if ($newActive) {
+            // Started
+            LockdownRecord::create([
+                'started_at' => now(),
+                'admin_id' => Auth::id(),
+                'reason' => $reason
+            ]);
+            Cache::forever('system_lockdown', ['active' => true, 'reason' => $reason]);
+        } else {
+            // Ended
+            $last = LockdownRecord::where('ended_at', null)->orderBy('started_at', 'desc')->first();
+            if ($last) {
+                $last->update(['ended_at' => now()]);
+            }
+            Cache::forever('system_lockdown', ['active' => false, 'reason' => '']);
+        }
+
+        $message = $newActive ? "EMERGENCY LOCKDOWN ACTIVATED: $reason" : "System Lockdown Deactivated";
+        
+        SystemLog::create([
+            'type' => 'status',
+            'source' => 'admin',
+            'message' => $message,
+            'details' => ['admin_id' => Auth::id()]
+        ]);
+
+        $this->recordActivity('LOCKDOWN_TOGGLE', $message);
+
+        return response()->json([
+            'success' => true,
+            'lockdown' => $newActive,
+            'message' => $message,
+            'reason' => $reason
+        ]);
     }
 }

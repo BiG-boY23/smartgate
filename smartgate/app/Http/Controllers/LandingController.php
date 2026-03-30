@@ -14,7 +14,11 @@ class LandingController extends Controller
 
     public function showRegistrationForm()
     {
-        return view('online-registration');
+        $brands = \App\Models\VehicleBrand::with('models')->orderBy('name')->get();
+        $categories = \App\Models\VehicleCategory::where('is_active', true)->orderBy('name')->get();
+        $colleges = \App\Models\College::with('courses')->orderBy('name')->get();
+
+        return view('online-registration', compact('brands', 'categories', 'colleges'));
     }
 
     public function validateDocument(Request $request)
@@ -59,19 +63,20 @@ class LandingController extends Controller
     {
         // 1. Base Validation
         $rules = [
-            'role' => 'required|in:student,faculty,staff',
-            'first_name' => 'required|string|max:100',
-            'last_name' => 'required|string|max:100',
-            'middle_name' => 'nullable|string|max:100',
-            'contact_number' => 'required|string|max:20',
-            'email_address' => 'nullable|email|max:255',
-            'vehicle_type' => 'required|in:car,suv,van,motorcycle',
-            'make_brand' => 'required|string|max:255',
-            'plate_number' => 'required|string|max:20',
+            'role'             => 'required|in:student,faculty,staff',
+            'first_name'       => 'required|string|max:100',
+            'last_name'        => 'required|string|max:100',
+            'middle_name'      => 'nullable|string|max:100',
+            'contact_number'   => 'required|string|max:20',
+            'email_address'    => 'nullable|email|max:255',
+            'vehicle_type'     => 'required|string|max:100',   // now dynamic category names
+            'make_brand'       => 'required|string|max:255',
+            'model_name'       => 'nullable|string|max:255',
+            'plate_number'     => 'required|string|max:20',
             // File validation
-            'cr_file' => 'required|image|max:5120',
-            'or_file' => 'required|image|max:5120',
-            'license_file' => 'required|image|max:5120',
+            'cr_file'          => 'required|image|max:5120',
+            'or_file'          => 'required|image|max:5120',
+            'license_file'     => 'required|image|max:5120',
         ];
 
         // 2. Role-specific Validation
@@ -122,15 +127,16 @@ class LandingController extends Controller
         $fullName = trim($request->first_name . ' ' . ($request->middle_name ? $request->middle_name . ' ' : '') . $request->last_name);
         
         $data = [
-            'role' => $request->role,
-            'full_name' => $fullName,
-            'contact_number' => $request->contact_number,
-            'email_address' => $request->email_address,
-            'vehicle_type' => $request->vehicle_type,
-            'make_brand' => $request->make_brand,
-            'plate_number' => $request->plate_number,
-            'status' => 'pending',
-            'registered_owner' => $fullName,
+            'role'              => $request->role,
+            'full_name'         => $fullName,
+            'contact_number'    => $request->contact_number,
+            'email_address'     => $request->email_address,
+            'vehicle_type'      => $request->vehicle_type,
+            'make_brand'        => $request->make_brand,
+            'model_name'        => $request->model_name,
+            'plate_number'      => $request->plate_number,
+            'status'            => 'pending',
+            'registered_owner'  => $fullName,
         ];
 
         // Specific mappings

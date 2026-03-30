@@ -78,7 +78,10 @@
                     </td>
                     <td>
                         <div style="font-weight: 600; color: #1e293b;">{{ $reg->full_name }}</div>
-                        <div style="font-size: 0.75rem; color: #64748b;">{{ ucfirst($reg->vehicle_type) }} • {{ $reg->make_brand }}</div>
+                        <div style="font-size: 0.75rem; color: #64748b;">
+                            <span style="font-weight: 700; text-transform: uppercase;">{{ $reg->vehicle_type }}</span> • 
+                            {{ $reg->make_brand . ' ' . ($reg->model_name ?? '') }}
+                        </div>
                     </td>
                     <td><span class="badge-plate">{{ $reg->plate_number }}</span></td>
                     <td>
@@ -207,8 +210,8 @@
                             <div>
                                 <h4 style="font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; margin-bottom: 0.5rem;">Vehicle</h4>
                                 <div style="font-weight: 600;">${reg.plate_number}</div>
-                                <div style="font-size: 0.8rem;">${reg.make_brand}</div>
-                                <div style="font-size: 0.8rem;">${reg.vehicle_type}</div>
+                                <div style="font-size: 0.8rem;">${reg.make_brand} ${reg.model_name || ''}</div>
+                                <div style="font-size: 0.8rem; font-weight: 700;">${reg.vehicle_type.toUpperCase()}</div>
                             </div>
                         </div>
                         <hr style="margin: 1rem 0; border: 0; border-top: 1px solid #e2e8f0;">
@@ -287,12 +290,26 @@
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 1rem;">
                         <div>
-                            <label style="display:block; font-weight:600; margin-bottom:4px; color:#475569;">Vehicle Type</label>
+                            <label style="display:block; font-weight:600; margin-bottom:4px; color:#475569;">Vehicle Category</label>
                             <select id="regType" class="swal2-select" style="width:100%; margin:0; height:38px; font-size:0.9rem;">
-                                <option value="car">Car</option>
-                                <option value="suv">SUV</option>
-                                <option value="van">Van</option>
-                                <option value="motorcycle">Motorcycle</option>
+                                <option value="" disabled selected>Select Category</option>
+                                @foreach($categories as $cat)
+                                    <option value="{{ $cat->name }}" data-id="{{ $cat->id }}">{{ $cat->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display:block; font-weight:600; margin-bottom:4px; color:#475569;">Make / Brand</label>
+                            <select id="regBrand" class="swal2-select" style="width:100%; margin:0; height:38px; font-size:0.9rem;" disabled>
+                                <option value="">Select Brand</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 1.5rem;">
+                        <div>
+                            <label style="display:block; font-weight:600; margin-bottom:4px; color:#475569;">Vehicle Model</label>
+                            <select id="regModel" class="swal2-select" style="width:100%; margin:0; height:38px; font-size:0.9rem;" disabled>
+                                <option value="">Select Model</option>
                             </select>
                         </div>
                         <div>
@@ -300,14 +317,13 @@
                             <input id="regPlate" class="swal2-input" style="width:100%; margin:0; height:38px; font-size:0.9rem;" placeholder="ABC 1234">
                         </div>
                     </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 1.5rem;">
-                        <div>
-                            <label style="display:block; font-weight:600; margin-bottom:4px; color:#475569;">Make / Brand</label>
-                            <input id="regBrand" class="swal2-input" style="width:100%; margin:0; height:38px; font-size:0.9rem;" placeholder="e.g. Toyota">
-                        </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 1rem;">
                         <div>
                             <label style="display:block; font-weight:600; margin-bottom:4px; color:#475569;">Contact Number</label>
                             <input id="regContact" class="swal2-input" style="width:100%; margin:0; height:38px; font-size:0.9rem;" placeholder="09XXXXXXXXX">
+                        </div>
+                        <div>
+                            <!-- Placeholder -->
                         </div>
                     </div>
 
@@ -364,6 +380,64 @@
                 const rfidOut = document.getElementById('modalRfidInput');
                 const man1 = document.getElementById('manual1');
                 const man2 = document.getElementById('manual2');
+
+                const regType = document.getElementById('regType');
+                const regBrand = document.getElementById('regBrand');
+                const regModel = document.getElementById('regModel');
+
+                regType.onchange = async () => {
+                    const categoryId = regType.options[regType.selectedIndex].getAttribute('data-id');
+                    regBrand.innerHTML = '<option value="">Loading...</option>';
+                    regBrand.disabled = true;
+                    regModel.innerHTML = '<option value="">Select Model</option>';
+                    regModel.disabled = true;
+
+                    try {
+                        const res = await fetch(`{{ url('api/brands') }}/${categoryId}`);
+                        const brands = await res.json();
+                        regBrand.innerHTML = '<option value="">Select Brand</option>';
+                        if (brands.length === 0) {
+                            regBrand.innerHTML = '<option value="" disabled>No brands for this category</option>';
+                        } else {
+                            brands.forEach(b => regBrand.innerHTML += `<option value="${b.name}" data-id="${b.id}">${b.name}</option>`);
+                        }
+                        regBrand.innerHTML += '<option value="Other" data-id="">Other / Not Listed</option>';
+                        regBrand.disabled = false;
+                    } catch (e) { 
+                        regBrand.innerHTML = '<option value="Other" data-id="">Other / Manual Entry</option>';
+                        regBrand.disabled = false;
+                    }
+                };
+
+                regBrand.onchange = async () => {
+                    const selectedBrand = regBrand.options[regBrand.selectedIndex];
+                    const brandId = selectedBrand.getAttribute('data-id');
+                    
+                    if (!brandId) {
+                        regModel.innerHTML = '<option value="Other" selected>Other / Not Listed</option>';
+                        regModel.disabled = false;
+                        return;
+                    }
+
+                    regModel.innerHTML = '<option value="">Loading...</option>';
+                    regModel.disabled = true;
+
+                    try {
+                        const res = await fetch(`{{ url('api/models') }}/${brandId}`);
+                        const models = await res.json();
+                        regModel.innerHTML = '<option value="">Select Model</option>';
+                        if (models.length === 0) {
+                            regModel.innerHTML = '<option value="Other" selected>Other / Not Listed</option>';
+                        } else {
+                            models.forEach(m => regModel.innerHTML += `<option value="${m.name}">${m.name}</option>`);
+                            regModel.innerHTML += '<option value="Other">Other / Not Listed</option>';
+                        }
+                        regModel.disabled = false;
+                    } catch (e) { 
+                        regModel.innerHTML = '<option value="Other" selected>Other / Manual Entry</option>';
+                        regModel.disabled = false;
+                    }
+                };
 
                 autoBtn.onclick = () => {
                     registrationMode = 'auto';
@@ -477,6 +551,7 @@
                 const type = document.getElementById('regType').value;
                 const plate = document.getElementById('regPlate').value;
                 const brand = document.getElementById('regBrand').value;
+                const model = document.getElementById('regModel').value;
                 const contact = document.getElementById('regContact').value;
                 const tag = document.getElementById('modalRfidInput').value;
 
@@ -504,7 +579,8 @@
                             plateNumber: plate,
                             makeBrand: brand,
                             contactNumber: contact,
-                            rfidTagId: tag
+                            rfidTagId: tag,
+                            modelName: model
                         })
                     });
                     const data = await response.json();

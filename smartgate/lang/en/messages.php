@@ -1,0 +1,27 @@
+<?php
+
+return [
+    'dashboard' => 'Guard Dashboard',
+    'monitoring_tag' => 'Real-time monitoring of entries and exits.',
+    'scanner_status' => 'Scanner Offline',
+    'scanner_hint' => 'Connect to hardware bridge to begin monitoring.',
+    'total_entries' => 'TOTAL ENTRIES TODAY',
+    'total_exits' => 'TOTAL EXITS TODAY',
+    'active_users' => 'ACTIVE USERS',
+    'recent_activity' => 'Recent Vehicle Activity',
+    'manual_entry' => 'Manual Entry',
+    'visitor_entry' => 'Visitor Entry',
+    'visitor_exit' => 'Visitor Exit',
+    'reports' => 'Reports',
+    'logout' => 'Logout',
+    'account_settings' => 'Account Settings',
+    'field_timestamp' => 'TIMESTAMP',
+    'field_vehicle' => 'VEHICLE DETAILS',
+    'field_owner' => 'OWNER',
+    'field_plate' => 'PLATE NUMBER',
+    'field_type' => 'TYPE',
+    'field_action' => 'ACTION',
+    'btn_view_details' => 'View Details',
+    'dark_mode' => 'Dark Mode',
+    'security_guard' => 'Security Guard',
+];

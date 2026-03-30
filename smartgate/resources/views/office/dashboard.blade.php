@@ -49,6 +49,22 @@
         </a>
         @endif
     </div>
+
+    <!-- CURRENT OCCUPANCY -->
+    <div class="stat-card">
+        <div class="stat-label">Current Occupancy</div>
+        <div style="font-size: 2rem; font-weight: 700; margin-top: 0.5rem; color: #1e40af;">{{ $currentOccupancy ?? 0 }} <span style="font-size: 1rem; color: #94a3b8; font-weight: 400;">/ {{ $totalCapacity ?? 200 }}</span></div>
+        <i class="ph ph-buildings stat-icon" style="color: #1e40af;"></i>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem;">
+            Vehicles (including visitors) currently on premises
+        </p>
+        @php
+            $occPercent = min(100, (($currentOccupancy ?? 0) / ($totalCapacity ?? 200)) * 100);
+        @endphp
+        <div style="width: 100%; height: 6px; background: #eff6ff; border-radius: 99px; margin-top: 0.5rem; overflow: hidden; border: 1px solid #dbeafe;">
+            <div style="width: {{ $occPercent }}%; height: 100%; background: #2563eb; border-radius: 99px; transition: width 0.5s ease;"></div>
+        </div>
+    </div>
 </div>
 
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">

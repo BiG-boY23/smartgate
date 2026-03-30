@@ -1,0 +1,27 @@
+<?php
+
+return [
+    'dashboard' => 'Dashboard ng Guwardiya',
+    'monitoring_tag' => 'Real-time na pagsubaybay sa mga pagpasok at paglabas.',
+    'scanner_status' => 'Scanner ay Offline',
+    'scanner_hint' => 'I-konekta ang hardware bridge para magsimulang mag-monitor.',
+    'total_entries' => 'KABUUANG PAGPASOK NGAYON',
+    'total_exits' => 'KABUUANG PAGLABAS NGAYON',
+    'active_users' => 'MGA AKTIBONG USER',
+    'recent_activity' => 'Kamakailang Aktibidad ng Sasakyan',
+    'manual_entry' => 'Manu-manong Pagpasok',
+    'visitor_entry' => 'Pagpasok ng Bisita',
+    'visitor_exit' => 'Paglabas ng Bisita',
+    'reports' => 'Mga Ulat',
+    'logout' => 'Mag-logout',
+    'account_settings' => 'Mga Setting ng Account',
+    'field_timestamp' => 'TIMESTAMP',
+    'field_vehicle' => 'DETALYE NG SASAKYAN',
+    'field_owner' => 'MAY-ARI',
+    'field_plate' => 'PLATE NUMBER',
+    'field_type' => 'URI',
+    'field_action' => 'AKSYON',
+    'btn_view_details' => 'Tingnan ang Detalye',
+    'dark_mode' => 'Dark Mode',
+    'security_guard' => 'Guwardiya',
+];

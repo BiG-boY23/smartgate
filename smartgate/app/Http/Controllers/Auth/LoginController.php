@@ -26,11 +26,19 @@ class LoginController extends Controller
             Session::put('user', $fullName);
             Session::put('role', $user->role);
             
+            // Record login audit trail
+            \App\Models\LoginLog::create([
+                'user_id'    => $user->id,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent()
+            ]);
+
             // Redirect based on role
             if ($user->role === 'admin') return redirect()->route('admin.dashboard')->with('success', "Welcome back, $fullName!");
             if ($user->role === 'office') return redirect()->route('office.dashboard')->with('success', "Welcome back, $fullName!");
             if ($user->role === 'guard') return redirect()->route('guard.dashboard')->with('success', "Welcome back, $fullName!");
         }
+
 
         return back()->withErrors(['username' => 'Invalid credentials. Try admin/password, office/password, or guard/password.']);
     }

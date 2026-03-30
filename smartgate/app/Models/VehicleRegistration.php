@@ -13,6 +13,9 @@ class VehicleRegistration extends Model
 
     protected $fillable = [
         'role',
+        'first_name',
+        'last_name',
+        'middle_name',
         'full_name',
         'university_id',
         'college_dept',
@@ -27,6 +30,7 @@ class VehicleRegistration extends Model
         'vehicle_type',
         'registered_owner',
         'make_brand',
+        'model_name',
         'model_year',
         'color',
         'plate_number',
@@ -86,5 +90,18 @@ class VehicleRegistration extends Model
     public function getAdminAttribute()
     {
         return $this->latestReview?->admin;
+    }
+
+    public function vehicles(): HasMany
+    {
+        return $this->hasMany(Vehicle::class, 'user_id');
+    }
+
+    /**
+     * Get all payments made for this registration.
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'vehicle_registration_id');
     }
 }

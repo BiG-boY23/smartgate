@@ -29,7 +29,7 @@ class RegistrationVerified extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Vehicle Registration Verified - SmartGate',
+            subject: 'Official Notice: Vehicle Registration Verified',
         );
     }
 
@@ -39,7 +39,7 @@ class RegistrationVerified extends Mailable
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.registration_verified',
+            view: 'emails.registration_verified',
         );
     }
 
