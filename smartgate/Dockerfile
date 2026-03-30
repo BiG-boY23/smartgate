@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions needed by Laravel + maatwebsite/excel
+# Install PHP extensions
 RUN docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd zip
 
 # Install Node.js 20
@@ -25,20 +25,25 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 
-# Copy all project files
+# Copy all files
 COPY . .
 
-# Install PHP dependencies (ignore platform reqs to avoid Windows/Linux lock mismatch)
-RUN composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs
+# Install PHP deps
+# --no-scripts: skip Laravel post-install scripts (they need APP_KEY which is only at runtime)
+# --ignore-platform-reqs: bypass Windows vs Linux composer.lock mismatch
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts --ignore-platform-reqs
 
-# Install Node dependencies and build frontend assets
+# Install Node deps and build frontend
 RUN npm install
 RUN npm run build
 
-# Laravel cache optimizations
-RUN php artisan config:clear
-RUN php artisan view:cache
+# Fix storage permissions
+RUN chmod -R 775 storage bootstrap/cache
 
 EXPOSE 8000
 
-CMD php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=${PORT:-8000}
+# At runtime: APP_KEY is available, so we can run artisan commands safely
+CMD php artisan config:clear && \
+    php artisan storage:link --force && \
+    php artisan migrate --force && \
+    php artisan serve --host=0.0.0.0 --port=${PORT:-8000}
